@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Simple Three.js Shader Example</title>
+    <style>
+        body {
+            margin: 0;
+        }
+
+        canvas {
+            display: block;
+        }
+    </style>
+</head>
+
+<body>
+    <!-- Three.js library -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r132/three.min.js"></script>
+
+    <script id="vertex-shader" type="x-shader/x-vertex">
+        uniform float time; // Time uniform for animations
+        varying float faceValue; // Varying to pass to the fragment shader
+    
+        void main() {
+            vec3 pos = position;
+            pos.x += sin(time + position.y) * 0.5; // Simple wave effect
+    
+            // Pass a value based on the normal to the fragment shader
+            //create a face-dependent value
+            faceValue = abs(normal.x) + abs(normal.y) * 2.0 + abs(normal.z) * 3.0;
+    
+            gl_Position = projectionMatrix * modelViewMatrix * vec4(pos, 1.0);
+        }
+    </script>
+
+    <script id="fragment-shader" type="x-shader/x-fragment">
+        precision mediump float;
+        uniform float t;
+        uniform float colorPhase;
+        varying float faceValue; // Received from the vertex shader
+    
+        void main() {
+            // modify the phase of the color change
+            float phase = t + colorPhase + faceValue;
+            float r = sin(phase) * 0.5 + 0.5;
+            float g = sin(phase + 2.0) * 0.5 + 0.5;
+            float b = cos(phase) * 0.5 + 0.5;
+            gl_FragColor = vec4(r, g, b, 1.0);
+        }
+    </script>
+
+
+    <script>
+        // Function to fetch shader code from script tags
+        function getShader(id) {
+            var shaderScript = document.getElementById(id);
+            return shaderScript ? shaderScript.textContent : null;
+        }
+
+        // Fetch shaders
+        var vertexShaderCode = getShader('vertex-shader');
+        var fragmentShaderCode = getShader('fragment-shader');
+
+        // SCENE
+        var scene = new THREE.Scene();
+
+        // CAMERA
+        var camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        camera.position.z = 2;
+
+        // RENDERER
+        //var renderer = new THREE.WebGLRenderer({ antialias: true, logarithmicDepthBuffer: true }); //invisible
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(window.devicePixelRatio);
+
+        document.body.appendChild(renderer.domElement);
+
+        // HANDLE WINDOW RESIZE
+        window.addEventListener('resize', function () {
+            var width = window.innerWidth;
+            var height = window.innerHeight;
+            renderer.setSize(width, height);
+            camera.aspect = width / height;
+            camera.updateProjectionMatrix();
+        });
+
+        // Function to create a bordered box
+        function createBorderedBox(borderColor, xPosition) {
+            // Shader material setup
+            var material = new THREE.ShaderMaterial({
+                uniforms: {
+                    time: { value: 0.0 },
+                    t: { value: 0.0 },
+                    colorPhase: { value: Math.random() * Math.PI * 2 }
+                },
+                vertexShader: vertexShaderCode,
+                fragmentShader: fragmentShaderCode
+            });
+
+            // Create the box geometry and mesh
+            var geometry = new THREE.BoxGeometry();
+            var cube = new THREE.Mesh(geometry, material);
+
+            // Position the cube
+            cube.position.x = xPosition;
+
+            // Create an EdgesGeometry for the borders
+            // var edges = new THREE.EdgesGeometry(geometry);
+            // var lineMaterial = new THREE.LineBasicMaterial({ color: borderColor });
+            //var border = new THREE.LineSegments(edges, lineMaterial);
+
+            // Add both the cube and the border to the scene
+            scene.add(cube);
+            // cube.add(border); // This ensures the border scales and rotates with the cube
+
+            // Return the cube so we can animate it later
+            return cube;
+        }
+
+        function createStars(count, speed) {
+            const geometry = new THREE.Geometry();
+
+            for (let i = 0; i < count; i++) {
+                const star = new THREE.Vector3(
+                    THREE.Math.randFloatSpread(2000), // Spread on x-axis
+                    THREE.Math.randFloatSpread(2000), // Spread on y-axis
+                    THREE.Math.randFloatSpread(2000)  // Spread on z-axis
+                );
+
+                star.speed = speed;
+                geometry.vertices.push(star);
+            }
+
+            const material = new THREE.PointsMaterial({ color: 0xFFFFFF, size: 2 });
+            const stars = new THREE.Points(geometry, material);
+
+            return stars;
+        }
+
+
+        // Define the size of the room
+        var roomSize = { width: 5, height: 3, depth: 5 };
+
+        // Create a BoxGeometry for the room
+        var roomGeometry = new THREE.BoxGeometry(roomSize.width, roomSize.height, roomSize.depth);
+
+        // Create an EdgesGeometry to get all the edges of the room
+        var roomEdges = new THREE.EdgesGeometry(roomGeometry);
+
+        // Create a LineBasicMaterial for the edges
+        var edgeMaterial = new THREE.LineBasicMaterial({ color: 0xaaaaaa });
+
+        // Create a LineSegments to render the edges
+        var room = new THREE.LineSegments(roomEdges, edgeMaterial);
+
+        // Add the room to the scene
+        scene.add(room);
+
+        
+        // Create a red cube with a black border
+        var cube = createBorderedBox(0x000000, -0.75); // Positioned left
+
+        // Create a blue cube with a white border
+        var blueCube = createBorderedBox(0xffffff, 0.75); // Positioned right
+
+        // Variables to hold the movement direction (1 for right, -1 for left)
+        var cubeDirection = 1;  // Red cube should move right initially
+        var blueCubeDirection = -1;  // Blue cube should move left initially
+        var speed = 0.02; // Speed of the cubes
+        var cubeSize = 1; // Assuming the cube is 1 unit in size
+
+        // Vertical movement variables
+        var cubeVerticalDirection = 1;
+        var blueCubeVerticalDirection = -1;
+        var verticalSpeed = 0.02; // Speed of the cubes moving vertically
+
+        // Add z-axis movement direction variables
+        var cubeZDirection = 1;
+        var blueCubeZDirection = -1;
+        var zSpeed = 0.02; // Speed of the cubes moving along z-axis
+
+        // Create a time variable to track the passing of time
+        var time = 0;
+
+        function animate() {
+            requestAnimationFrame(animate);
+
+            // Check the z boundary conditions using roomSize.depth/2 instead of 'depth'
+            var roomDepth = roomSize.depth / 2;
+
+            // Check for collision with the front and back boundaries for the red cube
+            if (cube.position.z > roomDepth - cubeSize / 2 || cube.position.z < -roomDepth + cubeSize / 2) {
+                cubeZDirection *= -1;
+            }
+
+            // Check for collision with the front and back boundaries for the blue cube
+            if (blueCube.position.z > roomDepth - cubeSize / 2 || blueCube.position.z < -roomDepth + cubeSize / 2) {
+                blueCubeZDirection *= -1;
+            }
+
+            // Increment the time variable
+            time += 0.01;
+
+            // Update the `time` uniform in each material for vertex manipulation
+            cube.material.uniforms.time.value = time;
+            blueCube.material.uniforms.time.value = time;
+
+            // Update the time uniform for each cube's material
+            cube.material.uniforms.t.value += 0.01; // You can adjust the increment value to change the speed
+            cube.material.uniforms.t.value %= 2 * Math.PI; // Keep the value within a 0 to 2*PI range
+
+            blueCube.material.uniforms.t.value += 0.02; // Different increment for a different speed
+            blueCube.material.uniforms.t.value %= 2 * Math.PI; // Keep the value within a 0 to 2*PI range
+
+            // Update cube positions
+            cube.position.x += speed * cubeDirection;
+            cube.position.y += verticalSpeed * cubeVerticalDirection;
+
+            blueCube.position.x += speed * blueCubeDirection;
+            blueCube.position.y += verticalSpeed * blueCubeVerticalDirection;
+
+            // Update z positions based on their respective speeds and directions
+            cube.position.z += zSpeed * cubeZDirection;
+            blueCube.position.z += zSpeed * blueCubeZDirection;
+
+            // Collision detection between cubes (now checks for both axes)
+            var distance = Math.sqrt(
+                Math.pow(cube.position.x - blueCube.position.x, 2) +
+                Math.pow(cube.position.y - blueCube.position.y, 2)
+            );
+
+            if (distance < cubeSize) {
+                // Bounce off each other on the x-axis
+                cubeDirection *= -1;
+                blueCubeDirection *= -1;
+
+                // Bounce off each other on the y-axis
+                cubeVerticalDirection *= -1;
+                blueCubeVerticalDirection *= -1;
+
+                // Reposition to prevent sticking (for both x and y axes)
+                var overlap = cubeSize - distance;
+                cube.position.x += overlap / 2 * cubeDirection;
+                cube.position.y += overlap / 2 * cubeVerticalDirection;
+
+                blueCube.position.x -= overlap / 2 * blueCubeDirection;
+                blueCube.position.y -= overlap / 2 * blueCubeVerticalDirection;
+            }
+
+            // Calculate the bounds for the z-axis based on camera settings
+            // Assuming your "room" size is based on camera view frustum
+            var depth = (camera.position.z - cubeSize / 2); // Adjust as needed for your room's size
+
+            // Check for collision with the front and back boundaries for the red cube
+            if (cube.position.z > depth || cube.position.z < -depth) {
+                cubeZDirection *= -1;
+            }
+
+            // Check for collision with the front and back boundaries for the blue cube
+            if (blueCube.position.z > depth || blueCube.position.z < -depth) {
+                blueCubeZDirection *= -1;
+            }
+
+            // Boundary checks
+            // These values are a bit arbitrary, you'll need to adjust them for your specific scene
+            var bounds = {
+                x: camera.aspect * camera.position.z * Math.tan((camera.fov / 2) * Math.PI / 180),
+                y: camera.position.z * Math.tan((camera.fov / 2) * Math.PI / 180)
+            };
+
+            // Check for collision with the boundaries for the red cube
+            if (cube.position.x > bounds.x - cubeSize / 2 || cube.position.x < -bounds.x + cubeSize / 2) {
+                cubeDirection *= -1;
+            }
+
+            // Check for collision with the boundaries for the blue cube
+            if (blueCube.position.x > bounds.x - cubeSize / 2 || blueCube.position.x < -bounds.x + cubeSize / 2) {
+                blueCubeDirection *= -1;
+            }
+
+            // Check for collision with the top and bottom boundaries for the red cube
+            if (cube.position.y > bounds.y - cubeSize / 2 || cube.position.y < -bounds.y + cubeSize / 2) {
+                cubeVerticalDirection *= -1;
+            }
+
+            // Check for collision with the top and bottom boundaries for the blue cube
+            if (blueCube.position.y > bounds.y - cubeSize / 2 || blueCube.position.y < -bounds.y + cubeSize / 2) {
+                blueCubeVerticalDirection *= -1;
+            }
+
+            // Rotate the cubes
+            cube.rotation.x += 0.01;
+            cube.rotation.y += 0.01;
+            blueCube.rotation.x += 0.01;
+            blueCube.rotation.y += 0.01;
+
+            // Render the scene
+            renderer.render(scene, camera);
+        }
+
+        animate();
+
+
+    </script>
+</body>
+
+</html>
